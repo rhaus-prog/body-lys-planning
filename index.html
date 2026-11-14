@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planning Body-Lys</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0D0D0F">
+<style>
+  html,body{margin:0;height:100%;background:#0D0D0F;color:#9B9BA6;font:16px system-ui,sans-serif}
+  #m{display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:0 24px}
+  button{margin-top:16px;background:#C46E7E;color:#fff;border:0;border-radius:8px;padding:10px 18px;font:inherit}
+</style>
+</head>
+<body>
+<div id="m">Chargement du planning…</div>
+<script>
+/* Coque du planning : la page elle-même et les données restent dans le script Apps Script
+   (une seule source). Cette coque la récupère, puis la remplace par un « google.script.run »
+   qui passe par le réseau (POST vers l'application Web). Le jeton k n'est jamais dans ce dépôt :
+   il vient du lien d'ouverture et est mémorisé sur l'appareil. */
+(function () {
+  var WEBAPP = 'https://script.google.com/macros/s/AKfycbz_MjDTWlJj3DgUEvuxRWNwU_ORdqT_VP_OckWOBeb5P2PwEdsKm9ugBf6aOS1a0Um-/exec';
+  var q = new URLSearchParams(location.search), S = {};
+  try { S = window.localStorage; } catch (e) {}
+  function mem(c, v) { try { if (v) S.setItem('pln_' + c, v); return S.getItem('pln_' + c) || ''; } catch (e) { return v || ''; } }
+  var K = mem('k', q.get('k')), U = mem('u', q.get('u'));
+  var m = document.getElementById('m');
+  if (!K) { m.textContent = 'Lien incomplet : ouvre le planning depuis l’appli Body-Lys.'; return; }
+  if (q.get('k') || q.get('u')) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+
+  function post(corps) {
+    return fetch(WEBAPP, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(corps) })
+      .then(function (r) { return r.json(); });
+  }
+  var SHIM = '(function(){var W=' + JSON.stringify(WEBAPP) + ',K=' + JSON.stringify(K) + ';' +
+    'function mk(ok,ko){return new Proxy({},{get:function(_,fn){' +
+    'if(fn==="withSuccessHandler")return function(f){return mk(f,ko)};' +
+    'if(fn==="withFailureHandler")return function(f){return mk(ok,f)};' +
+    'return function(){var a=[].slice.call(arguments);' +
+    'fetch(W,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({k:K,fn:fn,args:a})})' +
+    '.then(function(r){return r.json()})' +
+    '.then(function(r){if(r.ok){if(ok)ok(r.result)}else if(ko)ko({message:r.error})})' +
+    '.catch(function(x){if(ko)ko({message:String(x&&x.message||x)})})}}})}' +
+    'window.google={script:{run:mk(null,null)}};})();';
+
+  function charger() {
+    m.textContent = 'Chargement du planning…';
+    post({ k: K, fn: '__src', vue: q.get('vue') || '', d: q.get('d') || '', client: q.get('client') || '', u: U })
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.error);
+        var h = r.result.replace(/<head>/i, function (x) { return x + '<script>' + SHIM + '<\/script><link rel="manifest" href="manifest.webmanifest">'; });
+        document.open(); document.write(h); document.close();
+      })
+      .catch(function (e) {
+        m.innerHTML = '';
+        var t = document.createElement('div');
+        t.textContent = 'Impossible de charger le planning (' + (e && e.message || e) + ').';
+        var b = document.createElement('button'); b.textContent = 'Réessayer'; b.onclick = charger;
+        m.appendChild(t); t.appendChild(document.createElement('br')); t.appendChild(b);
+      });
+  }
+  charger();
+})();
+</script>
+</body>
+</html>
